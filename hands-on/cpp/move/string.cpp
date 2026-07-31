@@ -20,21 +20,34 @@ public:
     std::memcpy(s_, other.s_, size);
   }
   String(String &&tmp) : s_(tmp.s_) { tmp.s_ = nullptr; }
+   // copy assignment operator
   String &operator=(String const &other) {
     // to be implemented
+    size_t size = std::strlen(other.s_) + 1;
+    s_ = new char[size];
+    std::memcpy(s_, other.s_, size);
+    return *this;
   }
+  // move assignment operator
   String &operator=(String &&other) {
     // to be implemented
+    s_ = other.s_;
+    other.s_ = nullptr;
+    return *this;
   }
+
   std::size_t size() const { return s_ ? strlen(s_) : 0; }
   char const *c_str() const {
     // to be implemented;
+    return s_;
   }
   char &operator[](std::size_t n) {
     // to be implemented
+    return s_[n];
   }
   char const &operator[](std::size_t n) const {
     // to be implemented
+    return s_[n];
   }
 };
 

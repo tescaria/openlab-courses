@@ -27,18 +27,23 @@ int main(int argc, char **argv) {
   int N = 1024;
 
   // Part 1 of 6: Allocate buffer in pinned host memory (thrust::universal_vector)
-  auto h_a = ...;
+  auto h_a = thrust::universal_vector<int>(N);
 
   // Part 2 of 6: Allocate buffer in device memory
-  auto d_a = ...;
+  auto d_a = thrust::device_vector<int>(N);
 
   // Part 3 of 6: Set every element in the device buffer to i + 42 (where i is
   // the position in the buffer) Hint: check the thrust::sequence algorithm
+  thrust::sequence(d_a.begin(), d_a.end(), 42);
 
   // Part 4 of 6: Create a cuda stream
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
 
   // Part 5 of 6: Copy data from device to host asynchronously
-  thrust::copy(thrust::cuda::par.on(stream), ...);
+  thrust::copy(thrust::cuda::par.on(stream), d_a.begin(), d_a.end(), h_a.begin());
+
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 
   // Part 6 of 6: Verify that the data returned to the host is correct
   assert(std::ranges::equal(h_a, std::views::iota(42) | std::views::take(N)));

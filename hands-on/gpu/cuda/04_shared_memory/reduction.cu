@@ -72,33 +72,45 @@ int main() {
 
   // ───►►► Part 3 of 8 – allocate device buffer for partial sums ◄◄◄─────────
   // TODO: compute numBlocks and allocate d_partial accordingly.
-  int numBlocks = /* TODO */;
+  int numBlocks = (kNumElements + kBlockSize -1) / kBlockSize;
   int *d_partial = nullptr;
-  // TODO: cudaMallocAsync for d_partial
+  // TODO: cudaMallocAsync for d_partial (each block produces one partial sum)
+  CUDA_CHECK(cudaMallocAsync(&d_partial, Bytes<int>(numBlocks), stream));
+
 
   // ───►►► Part 4 of 8 – launch first reduction kernel ◄◄◄───────────────────
   // TODO: configure grid & block and launch blockReduceKernel
   // Example:
-  //   blockReduceKernel<<<numBlocks, kBlockSize, 0, stream>>>(d_input,
-  //                                                           d_partial,
-  //                                                           kNumElements);
-  // CUDA_CHECK(cudaGetLastError());
+  blockReduceKernel<<<numBlocks, kBlockSize, 0, stream>>>(d_input, d_partial, kNumElements);
+  CUDA_CHECK(cudaGetLastError());
 
   // ───►►► Part 5 of 8 – launch second (final) kernel ◄◄◄────────────────────
   // TODO: launch finalReduceKernel with one block (kBlockSize threads)
-  // CUDA_CHECK(cudaGetLastError());
+  finalReduceKernel<<<1, kBlockSize, 0, stream>>>(d_partial, numBlocks);
+  CUDA_CHECK(cudaGetLastError());
 
   // ───►►► Part 6 of 8 – copy result back ◄◄◄────────────────────────────────
   int deviceResult = 0;
   // TODO: cudaMemcpyAsync to copy the result back
+  cudaMemcpyAsync(&deviceResult, d_partial, Bytes<int>(1), cudaMemcpyDeviceToHost, stream);
 
   // ───►►► Part 7 of 8 – cleanup device allocations ◄◄◄─────────────────────
   // TODO: cudaFreeAsync for d_input and d_partial
+  CUDA_CHECK(cudaFreeAsync(d_input, stream));
+  CUDA_CHECK(cudaFreeAsync(d_partial, stream));
   // TODO: synchronize and destroy stream
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  CUDA_CHECK(cudaStreamDestroy(stream));
+
 
   // ───►►► Part 8 of 8 – verify ◄◄◄──────────────────────────────────────────
   std::cout << "Device sum: " << deviceResult << '\n';
   // TODO: compare deviceResult with hostResult (assert or if‑statement)
+  if (deviceResult == hostResult) {
+    std::cout << "Result correct!\n";
+  } else {
+    std::cout << "Result incorrect!\n";
+  }
 
   return 0;
 }
@@ -110,11 +122,51 @@ __global__ void blockReduceKernel(const int *__restrict__ d_input,
                                   int *__restrict__ d_partial,
                                   int numElements) {
   // TODO: allocate shared memory (kBlockSize ints) via __shared__
+  __shared__ int temp[kBlockSize];
   // TODO: load element (or 0 if out‑of‑range) into shared memory
+  auto g_index = threadIdx.x + blockIdx.x * blockDim.x;
+  if (g_index < numElements){
+    temp[threadIdx.x] = d_input[g_index];
+  } else {
+    temp[threadIdx.x] = 0;
+  }
+
+  __syncthreads();
   // TODO: perform reduction within the block (shared‑memory or warp shuffles)
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2){
+    if (threadIdx.x < stride){
+      temp[threadIdx.x] += temp[threadIdx.x + stride];
+    }
+    __syncthreads();
+  }
   // TODO: write block sum to d_partial[blockIdx.x]
+  if (threadIdx.x==0){
+    d_partial[blockIdx.x] = temp[0];
+  }
+
 }
 
 __global__ void finalReduceKernel(int *d_partial, int numPartials) {
   // TODO: final reduction of 'numPartials' values into d_partial[0]
+  __shared__ int temp[kBlockSize];
+  int sum = 0;
+  for (int i = threadIdx.x; i < numPartials; i += blockDim.x) {
+    sum += d_partial[i];
+  }
+
+  temp[threadIdx.x] = sum;
+  __syncthreads();
+
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+    if (threadIdx.x < stride) {
+      temp[threadIdx.x] += temp[threadIdx.x + stride];
+    }
+
+    __syncthreads();
+  }
+
+  if (threadIdx.x == 0) {
+    d_partial[0] = temp[0];
+  }
 }
+

@@ -1,5 +1,7 @@
+#include <memory>
+#include <iostream>
 
-int *factory();
+std::unique_ptr<int> factory();
 
 // "still reachable"
 auto g = factory();
@@ -9,4 +11,4 @@ int main() {
   auto t = factory();
 }
 
-int *factory() { return new int; }
+std::unique_ptr<int> factory() { return std::make_unique<int>(); }

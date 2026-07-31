@@ -1,11 +1,10 @@
+#include <memory>
+#include <iostream>
 
-int *factory();
+std::unique_ptr<int> factory();
 
 int main() {
   auto t = factory();
-
-  delete t;
-  delete t;
 }
 
-int *factory() { return new int; }
+std::unique_ptr<int> factory() { return std::make_unique<int>(); }
